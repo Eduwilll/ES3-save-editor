@@ -1,0 +1,2 @@
+es3-modifier==0.1.0
+pycryptodome>=3.20.0
