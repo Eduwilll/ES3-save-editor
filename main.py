@@ -30,7 +30,7 @@ except ImportError:
 
 _APP_DIR    = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(_APP_DIR, 'config.json')
-
+__version__ = "1.0.0"
 
 def load_config() -> dict:
     try:
@@ -565,6 +565,13 @@ class ES3Editor(tk.Tk):
         self.bind('<Control-o>', lambda _: self._open_file())
         self.bind('<Control-s>', lambda _: self._save_file())
 
+        # About
+        hm = tk.Menu(mb, tearoff=0)
+        mb.add_cascade(label='Help', menu=hm)
+        hm.add_command(label='About', command=self._show_about)
+
+    
+
     def _build_toolbar(self):
         bar = ttk.Frame(self, style='Toolbar.TFrame')
         bar.pack(fill=tk.X)
@@ -836,7 +843,15 @@ class ES3Editor(tk.Tk):
                 messagebox.showinfo('Restored', 'Backup restored. Re-open the file to reload it.')
             except Exception as exc:
                 messagebox.showerror('Error', str(exc))
-
+    # ── About ─────────────────────────────────────────────────────────────
+    def _show_about(self):
+            messagebox.showinfo(
+                'About ES3 Editor',
+                'ES3 Save Editor\n'
+                f'Version {__version__}\n'
+                'Author: Eduwilll100\n'
+            )
+        
     # ── Tree ───────────────────────────────────────────────────────────────
     def _refresh_tree(self):
         for iid in self._tree.get_children():
