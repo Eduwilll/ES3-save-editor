@@ -1,0 +1,50 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on version tags (e.g., v1.0.0)
+  workflow_dispatch: # Allow manual triggering from the Actions tab
+
+permissions:
+  contents: write # Needed to create a release
+
+jobs:
+  build-windows:
+    name: Build Windows Executable
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build Executable with PyInstaller
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --icon "icon.ico" --add-data "icon.ico;." --add-data "icon.png;." --name "ES3-Save-Editor" main.py
+
+      - name: Upload Build Artifact (for workflow runs)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ES3-Save-Editor-Windows
+          path: dist/ES3-Save-Editor.exe
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        # Only run this step if a version tag was pushed
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/ES3-Save-Editor.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false

@@ -25,12 +25,20 @@ except ImportError:
     sys.exit(1)
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Config (remembers last file + passwords)
+#  Config (remembers last file + passwords) & Versioning
 # ─────────────────────────────────────────────────────────────────────────────
-
-_APP_DIR    = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(_APP_DIR, 'config.json')
 __version__ = "1.0.0"
+
+if getattr(sys, 'frozen', False):
+    # Running as PyInstaller executable (.exe)
+    _APP_DIR = sys._MEIPASS
+    _DATA_DIR = os.path.dirname(sys.executable)
+else:
+    # Running as standard python script
+    _APP_DIR = os.path.dirname(os.path.abspath(__file__))
+    _DATA_DIR = _APP_DIR
+
+CONFIG_FILE = os.path.join(_DATA_DIR, 'config.json')
 
 def load_config() -> dict:
     try:
@@ -61,11 +69,25 @@ class PasswordDialog(tk.Toplevel):
         super().__init__(parent)
         self.result = None
 
-        self.title('Open ES3 File')
+        self.title(f'ES3 Save Editor v{__version__} — Open File')
         self.resizable(False, False)
         self.transient(parent)
 
+        # Inherit the same icon as the main window
+        try:
+            ico = os.path.join(_APP_DIR, 'icon.ico')
+            png = os.path.join(_APP_DIR, 'icon.png')
+            if os.path.exists(ico):
+                self.wm_iconbitmap(ico)
+            elif os.path.exists(png):
+                img = tk.PhotoImage(file=png)
+                self.iconphoto(True, img)
+                self._icon_ref = img
+        except Exception:
+            pass
+
         # ── Body ──────────────────────────────────────────────
+
         pad = dict(padx=16, pady=6)
 
         ttk.Label(self, text='File:', font=('Segoe UI', 9, 'bold')).grid(
@@ -167,7 +189,7 @@ class WelcomeDialog(tk.Toplevel):
     def __init__(self, parent, cfg: dict):
         super().__init__(parent)
         self.result = None
-        self.title('ES3 Save Editor — Open File')
+        self.title(f'ES3 Save Editor v{__version__} — Open File')
         self.resizable(True, True)
         self.minsize(560, 300)
         self.transient(parent)
@@ -479,7 +501,7 @@ def ticks_to_str(ticks: int) -> str:
 class ES3Editor(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('ES3 Save Editor')
+        self.title(f'ES3 Save Editor v{__version__}')
         self.geometry('1100x680')
         self.minsize(800, 500)
 
