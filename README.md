@@ -6,11 +6,11 @@ This editor safely handles ES3's AES-128-CBC encryption, GZip compression, and n
 
 ![ES3 Save Editor Icon](icon.png)
 
-## ✨ Features
+## Features
 
 - ** Automatic Decryption/Encryption**: Fully supports AES-128-CBC and PBKDF2 key derivation. Just provide your game's save password.
-- **🗜 GZip Support**: Automatically detects and handles GZip compression layers.
-- **🧠 Smart Type-Aware Editing**: The editor reads the `__type` of every field and gives you the safest, easiest widget to edit it:
+- **GZip Support**: Automatically detects and handles GZip compression layers.
+- **Smart Type-Aware Editing**: The editor reads the `__type` of every field and gives you the safest, easiest widget to edit it:
   - **Numbers** (`int`, `float`) get `＋/－` increment buttons.
   - **Booleans** get True/False radio toggles.
   - **Lists/Arrays** get a simple comma-separated editor.
@@ -19,10 +19,12 @@ This editor safely handles ES3's AES-128-CBC encryption, GZip compression, and n
   - 🟢 **Safe**: Basic data types. Edit freely!
   - 🟡 **Caution**: Dictionaries and Collections.
   - 🔴 **Advanced**: Complex custom game objects. Edits here have a raw text fallback.
-- **💾 Auto-Backup & Restore**: Automatically creates a `.bak` copy of your save file the first time you hit save. Revert instantly via `File -> Restore Backup`.
-- **🔑 Password Memory**: Securely remembers your file passwords and automatically reopens your last edited save file on startup (saved locally, never uploaded).
+- **Sortable Field List**: Click any column header (Field, Type, Value, S) to sort; click again to reverse.
+- **Raw File View**: Inspect the full decrypted save text, copy it, or export it to `.json`/`.txt` (`Ctrl+R`).
+- ** Auto-Backup & Restore**: Automatically creates a `.bak` copy of your save file the first time you hit save. Revert instantly via `File -> Restore Backup`.
+- **Password Memory**: Securely remembers your file passwords and automatically reopens your last edited save file on startup (saved locally, never uploaded).
 
-## 🚀 Download & Installation
+## Download & Installation
 
 You don't need to install Python to use this editor.
 
@@ -30,7 +32,7 @@ You don't need to install Python to use this editor.
 2. Download the `ES3-Save-Editor.exe` file.
 3. Run the executable.
 
-## 💻 Building from Source
+## Building from Source
 
 If you prefer to run from source or build the executable yourself:
 

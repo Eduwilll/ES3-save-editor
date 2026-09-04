@@ -12,7 +12,7 @@ import gzip
 import re
 import json
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
     from es3_modifier.main import decrypt_aes_128_cbc, encrypt_aes_128_cbc
@@ -27,7 +27,7 @@ except ImportError:
 # ─────────────────────────────────────────────────────────────────────────────
 #  Config (remembers last file + passwords) & Versioning
 # ─────────────────────────────────────────────────────────────────────────────
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 if getattr(sys, 'frozen', False):
     # Running as PyInstaller executable (.exe)
@@ -488,7 +488,7 @@ _EPOCH_TICKS = 621_355_968_000_000_000
 
 def ticks_to_str(ticks: int) -> str:
     try:
-        dt = datetime.utcfromtimestamp((ticks - _EPOCH_TICKS) / 10_000_000)
+        dt = datetime.fromtimestamp((ticks - _EPOCH_TICKS) / 10_000_000, timezone.utc)
         return dt.strftime('%Y-%m-%d  %H:%M:%S  UTC')
     except Exception:
         return f'{ticks} ticks'
@@ -514,6 +514,8 @@ class ES3Editor(tk.Tk):
         self._all_entries: list     = []
         self._modified: set         = set()
         self._cfg: dict             = load_config()
+        self._sort_col: str | None  = None   # '#0' | 'type' | 'value' | 's'
+        self._sort_desc: bool       = False
 
         self._build_ui()
         self._apply_theme()
@@ -586,6 +588,16 @@ class ES3Editor(tk.Tk):
         fm.add_command(label='Exit', command=self.quit)
         self.bind('<Control-o>', lambda _: self._open_file())
         self.bind('<Control-s>', lambda _: self._save_file())
+        self.bind('<Control-r>', lambda _: self._show_raw_tab())
+
+        # View
+        vm = tk.Menu(mb, tearoff=0)
+        mb.add_cascade(label='View', menu=vm)
+        vm.add_command(label='Editor tab',      command=self._show_editor_tab)
+        vm.add_command(label='Raw File tab',    accelerator='Ctrl+R',
+                       command=self._show_raw_tab)
+        vm.add_separator()
+        vm.add_command(label='Refresh Raw view', command=self._refresh_raw_view)
 
         # About
         hm = tk.Menu(mb, tearoff=0)
@@ -599,6 +611,7 @@ class ES3Editor(tk.Tk):
         bar.pack(fill=tk.X)
         ttk.Button(bar, text='📂 Open',  command=self._open_file).pack(side=tk.LEFT, padx=6, pady=4)
         ttk.Button(bar, text='💾 Save',  command=self._save_file).pack(side=tk.LEFT, padx=(0,6), pady=4)
+        ttk.Button(bar, text='📄 Raw',  command=self._show_raw_tab).pack(side=tk.LEFT, padx=(0,6), pady=4)
         ttk.Separator(bar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4, pady=4)
         self._file_lbl = ttk.Label(bar, text='No file open', foreground='#888')
         self._file_lbl.pack(side=tk.LEFT, padx=4)
@@ -655,10 +668,14 @@ class ES3Editor(tk.Tk):
         cols = ('type','value','s')
         self._tree = ttk.Treeview(parent, columns=cols, show='tree headings',
                                   selectmode='browse')
-        self._tree.heading('#0',    text='Field')
-        self._tree.heading('type',  text='Type')
-        self._tree.heading('value', text='Value')
-        self._tree.heading('s',     text='')
+        self._tree.heading('#0',    text='Field',
+                           command=lambda: self._sort_by('#0'))
+        self._tree.heading('type',  text='Type',
+                           command=lambda: self._sort_by('type'))
+        self._tree.heading('value', text='Value',
+                           command=lambda: self._sort_by('value'))
+        self._tree.heading('s',     text='S',
+                           command=lambda: self._sort_by('s'))
         self._tree.column('#0',    width=165, minwidth=100)
         self._tree.column('type',  width=100, minwidth=70)
         self._tree.column('value', width=90,  minwidth=60)
@@ -689,10 +706,120 @@ class ES3Editor(tk.Tk):
                                   style='Hint.TLabel')
         self._i_hint.grid(row=2, column=1, sticky='w', padx=8, columnspan=2, pady=(4,1))
 
-        self._ed_frame = ttk.LabelFrame(parent, text='Edit Value')
-        self._ed_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=(2,4))
+        self._notebook = ttk.Notebook(parent)
+        self._notebook.pack(fill=tk.BOTH, expand=True, padx=4, pady=(2,4))
+
+        editor_tab = ttk.Frame(self._notebook)
+        self._notebook.add(editor_tab, text='✏️  Editor')
+        self._ed_frame = ttk.LabelFrame(editor_tab, text='Edit Value')
+        self._ed_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
         ttk.Label(self._ed_frame, text='Select a field on the left to edit it.',
                   foreground='#aaa').pack(expand=True)
+
+        raw_tab = ttk.Frame(self._notebook)
+        self._notebook.add(raw_tab, text='📄  Raw File')
+        self._build_raw_panel(raw_tab)
+
+    def _build_raw_panel(self, parent):
+        bar = ttk.Frame(parent)
+        bar.pack(fill=tk.X, padx=4, pady=(4,2))
+        ttk.Button(bar, text='🔄 Refresh', command=self._refresh_raw_view).pack(
+            side=tk.LEFT, padx=(0,4))
+        ttk.Button(bar, text='📋 Copy', command=self._copy_raw).pack(
+            side=tk.LEFT, padx=(0,4))
+        ttk.Button(bar, text='💾 Export…', command=self._export_raw).pack(
+            side=tk.LEFT, padx=(0,4))
+        self._raw_info_var = tk.StringVar(value='No file open')
+        ttk.Label(bar, textvariable=self._raw_info_var,
+                  style='Sub.TLabel').pack(side=tk.RIGHT, padx=4)
+
+        tf = ttk.Frame(parent)
+        tf.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0,4))
+        self._raw_text = tk.Text(tf, wrap=tk.NONE, font=('Consolas', 9),
+                                 undo=False, state=tk.DISABLED)
+        vsb = ttk.Scrollbar(tf, orient=tk.VERTICAL, command=self._raw_text.yview)
+        hsb = ttk.Scrollbar(parent, orient=tk.HORIZONTAL,
+                            command=self._raw_text.xview)
+        self._raw_text.configure(yscrollcommand=vsb.set,
+                                 xscrollcommand=hsb.set)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._raw_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        hsb.pack(fill=tk.X, padx=4, pady=(0,4))
+        self._raw_dirty = False
+        # Disabled Text widgets ignore the wheel on some platforms —
+        # our explicit binding keeps scrolling working everywhere.
+        self._bind_mousewheel(self._raw_text, self._raw_text)
+
+    def _get_current_raw_text(self) -> str:
+        if not self._all_entries:
+            return ''
+        try:
+            return rebuild_file(self._all_entries)
+        except Exception:
+            return ''
+
+    def _refresh_raw_view(self):
+        if not hasattr(self, '_raw_text'):
+            return
+        text = self._get_current_raw_text()
+        self._raw_text.configure(state=tk.NORMAL)
+        self._raw_text.delete('1.0', tk.END)
+        if text:
+            self._raw_text.insert('1.0', text)
+            lines = text.count('\n') + 1
+            self._raw_info_var.set(
+                f'{len(text):,} chars  ·  {lines:,} lines  ·  '
+                f'{len(self._all_entries)} fields')
+        else:
+            self._raw_text.insert('1.0', 'Open a .es3 file to see its raw content here.')
+            self._raw_info_var.set('No file open')
+        self._raw_text.configure(state=tk.DISABLED)
+        self._raw_dirty = False
+
+    def _mark_raw_dirty(self):
+        self._raw_dirty = True
+        if hasattr(self, '_raw_info_var'):
+            n = len(self._all_entries)
+            self._raw_info_var.set(
+                f'{n} fields  ·  Raw view stale — press Refresh')
+
+    def _copy_raw(self):
+        text = self._get_current_raw_text()
+        if not text:
+            messagebox.showwarning('Nothing to copy', 'Open a file first.')
+            return
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        self._set_status('Raw content copied to clipboard.')
+
+    def _export_raw(self):
+        text = self._get_current_raw_text()
+        if not text:
+            messagebox.showwarning('Nothing to export', 'Open a file first.')
+            return
+        path = filedialog.asksaveasfilename(
+            title='Export raw content',
+            defaultextension='.json',
+            filetypes=[('JSON Files', '*.json'), ('Text Files', '*.txt'),
+                       ('All Files', '*.*')],
+        )
+        if not path:
+            return
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(text)
+            self._set_status(f'Raw content exported  ·  {path}')
+        except Exception as exc:
+            messagebox.showerror('Export Error', str(exc))
+
+    def _show_raw_tab(self):
+        if hasattr(self, '_notebook'):
+            self._notebook.select(1)
+            self._refresh_raw_view()
+
+    def _show_editor_tab(self):
+        if hasattr(self, '_notebook'):
+            self._notebook.select(0)
 
     def _build_status(self):
         self._status_var = tk.StringVar(value='Ready — open a .es3 file to begin.')
@@ -781,6 +908,7 @@ class ES3Editor(tk.Tk):
             self._safety_filter.set('all')
             self._refresh_tree()
             self._clear_editor()
+            self._refresh_raw_view()
 
             # Update config
             self._cfg['last_file'] = path
@@ -845,6 +973,7 @@ class ES3Editor(tk.Tk):
             self._modified.clear()
             self._unsaved_lbl.config(text='')
             self._refresh_tree()
+            self._refresh_raw_view()
             self._set_status(f'Saved  ·  {path}')
             messagebox.showinfo('Saved', 'File saved successfully!')
         except Exception as exc:
@@ -881,12 +1010,20 @@ class ES3Editor(tk.Tk):
         ft  = self._search_var.get().lower()
         sf  = self._safety_filter.get()
         sf  = {'🟢 safe':'safe','🟡 caution':'caution','🔴 advanced':'advanced'}.get(sf, 'all')
+        rows = []
         for e in self._all_entries:
             key    = e['key']
             safety = e.get('safety', 'advanced')
             if sf != 'all' and safety != sf: continue
             if ft and ft not in key.lower() and ft not in e.get('display_type','').lower():
                 continue
+            rows.append(e)
+        if self._sort_col is not None:
+            rows = sorted(rows, key=lambda e: self._sort_key_for(e, self._sort_col),
+                          reverse=self._sort_desc)
+        for e in rows:
+            key    = e['key']
+            safety = e.get('safety', 'advanced')
             tags = [safety]
             if key in self._modified: tags.append('modified')
             self._tree.insert('', 'end', iid=key, text=key,
@@ -894,6 +1031,57 @@ class ES3Editor(tk.Tk):
                                        value_preview(e.get('value'), e.get('kind','')),
                                        SAFETY[safety][0]),
                                tags=tuple(tags))
+
+    # ── Tree sorting ─────────────────────────────────────────────────────
+    _SAFETY_ORDER = {'safe': 0, 'caution': 1, 'advanced': 2}
+
+    @staticmethod
+    def _natural_key(s: str):
+        """Case-insensitive natural key: 'field2' < 'field10', digits group together."""
+        parts = re.split(r'(\d+)', s or '')
+        return tuple((0, int(p)) if p.isdigit() else (1, p.casefold())
+                     for p in parts)
+
+    def _sort_key_for(self, entry: dict, col: str):
+        key = entry.get('key', '')
+        nk  = self._natural_key(key)
+        if col == 'type':
+            return (entry.get('display_type', '?').casefold(), nk)
+        if col == 'value':
+            kind, val = entry.get('kind'), entry.get('value')
+            if val is None:
+                return (9, 0, '', nk)
+            if kind == 'number':
+                return (0, val, '', nk)
+            if kind == 'bool':
+                return (1, int(bool(val)), '', nk)
+            if kind == 'string':
+                return (2, 0, str(val).casefold(), nk)
+            if isinstance(val, list):
+                return (3, len(val), str(val)[:60].casefold(), nk)
+            if isinstance(val, dict):
+                return (4, len(val), '', nk)
+            return (5, 0, str(val).casefold(), nk)
+        if col == 's':
+            return (self._SAFETY_ORDER.get(entry.get('safety', 'advanced'), 2), nk)
+        return nk  # '#0' — Field name
+
+    def _sort_by(self, col: str):
+        """Header click: sort by column, click again to flip direction."""
+        if self._sort_col == col:
+            self._sort_desc = not self._sort_desc
+        else:
+            self._sort_col  = col
+            self._sort_desc = False
+        self._update_sort_headings()
+        self._refresh_tree()
+
+    def _update_sort_headings(self):
+        arrow = ' ▲' if not self._sort_desc else ' ▼'
+        self._tree.heading('#0',    text='Field' + (arrow if self._sort_col == '#0' else ''))
+        self._tree.heading('type',  text='Type'  + (arrow if self._sort_col == 'type' else ''))
+        self._tree.heading('value', text='Value' + (arrow if self._sort_col == 'value' else ''))
+        self._tree.heading('s',     text='S'     + (arrow if self._sort_col == 's' else ''))
 
     def _update_tree_row(self, entry):
         key = entry['key']
@@ -1048,8 +1236,9 @@ class ES3Editor(tk.Tk):
         vsb.pack(side=tk.RIGHT, fill=tk.Y, padx=(0,4))
         canvas.pack(fill=tk.BOTH, expand=True, padx=(8,0))
         table = ttk.Frame(canvas)
-        canvas.create_window((0,0), window=table, anchor='nw')
+        _win = canvas.create_window((0,0), window=table, anchor='nw')
         table.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.bind('<Configure>', lambda e: canvas.itemconfig(_win, width=e.width))
         vars_map = {}
         for row_idx, (k, v) in enumerate(val_obj.items()):
             if k == '__type': continue
@@ -1068,6 +1257,12 @@ class ES3Editor(tk.Tk):
                 lbl = json.dumps(v) if not isinstance(v, str) else repr(v)
                 ttk.Label(table, text=lbl[:48], foreground='#888',
                           font=('Consolas', 8)).grid(row=row_idx, column=1, sticky='w', padx=4)
+
+        # Canvas has no wheel scrolling by default — without this the user
+        # can only drag the scrollbar thumb. Bind wheel over the canvas
+        # and every row widget so scrolling works wherever the mouse is.
+        self._bind_mousewheel(canvas, canvas)
+        self._bind_mousewheel(table, canvas)
 
         def apply():
             nv = dict(val_obj)
@@ -1100,6 +1295,7 @@ class ES3Editor(tk.Tk):
         vsb.pack(side=tk.RIGHT, fill=tk.Y); txt.pack(fill=tk.BOTH, expand=True)
         hsb.pack(fill=tk.X, padx=8)
         txt.insert('1.0', entry['raw_block'])
+        self._bind_mousewheel(txt, txt)
 
         def apply():
             nb = txt.get('1.0', tk.END).rstrip('\n')
@@ -1120,6 +1316,7 @@ class ES3Editor(tk.Tk):
         self._update_tree_row(entry)
         self._set_status(
             f'Changed: {key}  →  {value_preview(entry.get("value"), entry.get("kind",""))}')
+        self._mark_raw_dirty()
 
     # ── Helpers ─────────────────────────────────────────────────────────────
     def _update_backup_label(self):
@@ -1133,6 +1330,51 @@ class ES3Editor(tk.Tk):
 
     def _set_status(self, msg: str):
         self._status_var.set(msg)
+
+    # ── Mouse-wheel scrolling ────────────────────────────────────────────
+    def _bind_mousewheel(self, widget, target):
+        """Route the mouse wheel over widget (incl. all children) to target.
+
+        Needed because tk Canvas has no wheel scrolling by default (only
+        scrollbar dragging works), and disabled Text widgets may ignore
+        the wheel on some platforms. Covers Windows (MouseWheel),
+        Linux (Button-4/5); macOS MouseWheel deltas work too.
+        """
+        def _scroll(event):
+            try:
+                steps = 0
+                if getattr(event, 'delta', 0):
+                    steps = int(-1 * (event.delta / 120))
+                elif getattr(event, 'num', None) == 4:
+                    steps = -1
+                elif getattr(event, 'num', None) == 5:
+                    steps = 1
+                if steps:
+                    target.yview_scroll(steps, 'units')
+            except Exception:
+                pass
+            return 'break'
+
+        seen = set()
+
+        def _attach(w):
+            if id(w) in seen:
+                return
+            seen.add(id(w))
+            try:
+                w.bind('<MouseWheel>', _scroll)
+                w.bind('<Button-4>', _scroll)
+                w.bind('<Button-5>', _scroll)
+            except Exception:
+                pass
+            try:
+                children = w.winfo_children()
+            except Exception:
+                children = []
+            for child in children:
+                _attach(child)
+
+        _attach(widget)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
