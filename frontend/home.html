@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="./css/pure-min.css">
+    <link rel="stylesheet" href="./css/global.css">
+    <title>ES3 Save Editor</title>
+</head>
+
+<body>
+    <header class="topbar">
+        <div class="container topbar-content">
+            <a class="brand" href="./home.html" aria-label="ES3 Save Editor home">
+                <span class="brand-mark">ES3</span>
+                <span>Save Editor</span>
+            </a>
+            <span class="topbar-note">Password memory</span>
+        </div>
+    </header>
+
+    <main class="container page-shell">
+        <section class="intro" aria-labelledby="page-title">
+            <p class="eyebrow">Game save utility</p>
+            <h1 id="page-title">Find a game.<br><em>Keep its key close.</em></h1>
+            <p class="intro-copy">Search the Steam catalog, select a title, and save its ES3 password locally for quick access.</p>
+        </section>
+
+        <div class="workspace">
+            <section class="panel search-panel" aria-labelledby="search-heading">
+                <div class="panel-heading">
+                    <div>
+                        <p class="section-kicker">01 / Catalog</p>
+                        <h2 id="search-heading">Choose a game</h2>
+                    </div>
+                    <span class="panel-step">Search</span>
+                </div>
+
+                <form id="search-form" class="search-form">
+                    <label for="search">Steam game title</label>
+                    <div class="search-row">
+                        <input id="search" name="search" autocomplete="off" placeholder="Try Stardew Valley" required>
+                        <button class="pure-button button-dark" type="submit">Search</button>
+                    </div>
+                </form>
+
+                <div class="results-header">
+                    <span id="status" role="status" aria-live="polite">Your results will appear here.</span>
+                    <span id="result-count" class="result-count"></span>
+                </div>
+                <div id="games" class="game-list" aria-live="polite">
+                    <div class="empty-state">
+                        <span class="empty-icon">+</span>
+                        <p>Search for a game to get started.</p>
+                    </div>
+                </div>
+            </section>
+
+            <aside class="panel password-panel" aria-labelledby="password-heading">
+                <div class="panel-heading">
+                    <div>
+                        <p class="section-kicker">02 / Memory</p>
+                        <h2 id="password-heading">Save a password</h2>
+                    </div>
+                    <span class="panel-step">Secure</span>
+                </div>
+                <p class="panel-description">Select a result or enter its Steam ID, then add the password used by the save file.</p>
+
+                <form id="password-form" class="pure-form pure-form-stacked">
+                    <label for="game-id">Steam game ID</label>
+                    <input id="game-id" name="game-id" type="number" inputmode="numeric" placeholder="e.g. 413150" required>
+                    <label for="password">ES3 password</label>
+                    <div class="password-input">
+                        <input id="password" name="password" type="password" autocomplete="new-password" placeholder="Enter password" required>
+                        <button id="toggle-password" class="visibility-button" type="button" aria-label="Show password">Show</button>
+                    </div>
+                    <button class="pure-button button-accent" type="submit">Save password <span aria-hidden="true">&#8594;</span></button>
+                </form>
+
+                <div class="history" aria-labelledby="history-heading">
+                    <div class="history-heading">
+                        <h3 id="history-heading">Saved history</h3>
+                        <span id="history-status">Select a game</span>
+                    </div>
+                    <div id="password-history" class="history-list">
+                        <p class="history-empty">No game selected yet.</p>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <p class="privacy-note"><span aria-hidden="true">&#9679;</span> Passwords are stored by this local app and are never sent to Steam.</p>
+    </main>
+    <script type="module" src="./main.js"></script>
+</body>
+
+</html>

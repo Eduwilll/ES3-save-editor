@@ -49,3 +49,8 @@ If you prefer to run from source or build the executable yourself:
    ```bash
    pyinstaller --noconfirm --onefile --windowed --icon "icon.ico" --add-data "icon.ico;." --add-data "icon.png;." --name "ES3-Save-Editor" main.py
    ```
+5. To run Api
+   ```bash
+   venv\Scripts\python.exe -m uvicorn api.main:app --reload
+   ```
+

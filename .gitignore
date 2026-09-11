@@ -7,3 +7,6 @@ venv
 *.spec
 build/
 dist/
+*.db
+__pycache__/
+*.py[cod]
